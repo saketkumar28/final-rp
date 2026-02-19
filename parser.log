@@ -1,0 +1,26 @@
+2026-02-18 23:20:53,107 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:53,112 - __main__ - INFO - STARTING RESUME PARSE
+2026-02-18 23:20:53,113 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:53,183 - __main__ - INFO - Processing PDF with 1 pages
+2026-02-18 23:20:53,542 - __main__ - INFO - Text length: 4935, Scanned: False
+2026-02-18 23:20:53,601 - __main__ - INFO - Processing PDF with 1 pages
+2026-02-18 23:20:54,284 - __main__ - INFO - Extracted 12 unique hyperlinks
+2026-02-18 23:20:54,286 - __main__ - INFO - ----------------------------------------------------------------------
+2026-02-18 23:20:54,286 - __main__ - INFO - Extracting all fields...
+2026-02-18 23:20:54,288 - __main__ - INFO - ----------------------------------------------------------------------
+2026-02-18 23:20:54,290 - __main__ - INFO - Name extracted: 'Saket Kumar' (confidence: 1.00)
+2026-02-18 23:20:54,292 - __main__ - INFO - Extracted 1 emails: ['aec.cse.saketkumar@gmail.com']
+2026-02-18 23:20:54,295 - __main__ - INFO - Total phones extracted: 0
+2026-02-18 23:20:54,300 - __main__ - INFO - Found skills without header (fallback): Languages: Python,JavaScript,C,SQL,C++
+2026-02-18 23:20:54,301 - __main__ - INFO - Processing 15 skill lines
+2026-02-18 23:20:54,303 - __main__ - INFO - Extracted 30 unique skills
+2026-02-18 23:20:54,304 - __main__ - WARNING - No education section found
+2026-02-18 23:20:54,305 - __main__ - WARNING - No projects section found
+2026-02-18 23:20:54,306 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:54,306 - __main__ - INFO - PARSE SUMMARY:
+2026-02-18 23:20:54,307 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:54,389 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:54,399 - __main__ - INFO - ======================================================================
+2026-02-18 23:20:54,522 - __main__ - INFO - Processing PDF with 1 pages
+2026-02-18 23:20:54,883 - __main__ - INFO - Text length: 4935, Scanned: False
+2026-02-18 23:20:54,940 - __main__ - INFO - Processing PDF with 1 pages
