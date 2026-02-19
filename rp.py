@@ -64,9 +64,11 @@ def extract_all_hyperlinks(file_bytes):
     return list(set(urls))
 
 DURATION_PATTERN = re.compile(
-    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\s*[-–—]\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b|'
-    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\s*[-–—]\s*(?:Present|Current|Ongoing|Now)\b|'
-    r'\b\d{4}\s*[-–—]\s*\d{4}\b',
+    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\.,]*\d{2,4}[\s\-–—\|to]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\.,]*\d{2,4}\b|'
+    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\.,]*\d{2,4}[\s\-–—\|to]+(?:Present|Current|Ongoing|Now|Till Date)\b|'
+    r'\b\d{2}/\d{4}[\s\-–—\|to]+\d{2}/\d{4}\b|\b\d{2}/\d{4}[\s\-–—\|to]+(?:Present|Current|Ongoing|Now|Till Date)\b|'
+    r'\b(?:19|20)\d{2}[\s\-–—\|to]+(?:19|20)\d{2}\b|\b(?:19|20)\d{2}[\s\-–—\|to]+(?:Present|Current|Ongoing|Now|Till Date)\b|'
+    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}\b',
     re.IGNORECASE
 )
 
@@ -139,12 +141,10 @@ def extract_skills(text):
         if c.lower() not in [u.lower() for u in unique]: unique.append(c)
     return ", ".join(unique)
 
-# --- THE FIX: FLAWLESS EDUCATION PARSER ---
 def extract_education(text):
     edu_text = get_section_text(text, r'education|academic|qualifications|educational background')
     result = {"phd": None, "pg": None, "ug": None, "class12": None, "class10": None}
     
-    # Fully patched to explicitly catch standalone parenthesis formats
     DEGREE_PATTERNS = {
         'phd': re.compile(r'(?i)\bph\.?\s*d\.?\b|\bdoctorate\b'),
         'pg': re.compile(r'(?i)\bm\.?\s*tech\b|\bm\.?\s*e\.?\b|\bmba\b|\bm\.?\s*s\.?\b|\bm\.?\s*sc\.?\b|\bmca\b|\bmaster\b|\bpost\s*grad\b'),
@@ -167,14 +167,15 @@ def extract_education(text):
                 used_indices.add(i)
                 context_lines = [line]
                 
-                # Context grabber
-                for j in range(1, 4):
-                    if i + j < len(lines) and i + j not in used_indices and not any(p.search(lines[i+j]) for p in DEGREE_PATTERNS.values()):
-                        context_lines.append(lines[i+j])
-                        used_indices.add(i+j)
-                    else:
-                        break
+                # Broaden context window to capture multi-line university names
+                start = max(0, i - 2)
+                end = min(len(lines), i + 3)
+                for j in range(start, i):
+                    if any(p.search(lines[j]) for p in DEGREE_PATTERNS.values()): start = j + 1
+                for j in range(i + 1, end):
+                    if any(p.search(lines[j]) for p in DEGREE_PATTERNS.values()): end = j; break
                 
+                context_lines = lines[start:end]
                 full_context = " | ".join(context_lines)
 
                 grade = None
@@ -196,10 +197,11 @@ def extract_education(text):
                 if grade_match: clean_text = clean_text.replace(grade_match.group(0), '')
                 if duration: clean_text = clean_text.replace(duration, '')
                 
-                clean_text = re.sub(r'\(\s*(?:CGPA|GPA|%|Marks)?\s*[:\-]?\s*(?:/\s*10|100)?\s*\)', '', clean_text, flags=re.IGNORECASE)
-                clean_text = re.sub(r'(?i)cgpa|gpa', '', clean_text)
+                # FIX: God-tier fraction and bracket scrubber
+                clean_text = re.sub(r'\(\s*(?:CGPA|GPA|%|Marks)?\s*[:\-]?\s*(?:/?\s*(?:10|100|10\.0))?\s*\)', '', clean_text, flags=re.IGNORECASE)
+                clean_text = re.sub(r'\(\s*/\s*10\s*\)', '', clean_text)
+                clean_text = re.sub(r'(?i)cgpa|gpa|percentage|marks', '', clean_text)
                 
-                # FIX: Splitting by comma so "Asansol Engineering College" perfectly detaches from "B.Tech"
                 parts = [p.strip() for p in re.split(r'\||\s{3,}|\n|,', clean_text) if p.strip()]
                 
                 degree = ""
@@ -218,24 +220,28 @@ def extract_education(text):
                 if not degree:
                     match = pattern.search(full_context)
                     degree = match.group(0) if match else ""
-
-                # Eradicate residual characters from the degree and institution
+                
                 degree = re.sub(r'^[^a-zA-Z0-9+]+|[^a-zA-Z0-9+]+$', '', degree).strip()
+                
+                if not institution:
+                    # FIX: Prevent the fallback from grabbing the degree string by checking `degree not in p`
+                    leftover_parts = [p for p in parts if p and p not in degree and degree not in p and len(p) > 4 and not re.search(r'\b(20\d{2}|19\d{2})\b', p)]
+                    if leftover_parts:
+                        institution = max(leftover_parts, key=len)
+
                 if institution:
-                    # Snip off lingering (XII) or (X) from the school name
-                    institution = re.sub(r'(?i)\s*\((?:xii|x|12th|10th)\)\s*$', '', institution)
+                    # FIX: Guillotine regex! Chops off trailing (XII or (X completely, even without closing bracket.
+                    institution = re.sub(r'(?i)\s*\(\s*(?:xii|x|12th|10th).*$', '', institution)
                     institution = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', institution).strip()
-                    # Strip lingering geo-locations
                     institution = re.sub(r'(?i)\s*(WB|West Bengal|India|Asansol)$', '', institution).strip(' ,-')
                     
-                degree = re.sub(r'(?i)\s*(WB|West Bengal|India|Asansol)$', '', degree).strip(' ,-')
-
                 result[level] = {
                     "degree": degree.upper() if len(degree) <= 4 else degree,
                     "institution": institution if institution else None,
                     "duration": duration,
                     "grade": grade
                 }
+                for j in range(start, end): lines[j] = ""
                 break
 
     return result
@@ -249,13 +255,19 @@ def extract_projects(text, all_hyperlinks):
     current_proj = None
     
     for line in lines:
+        dur_match = DURATION_PATTERN.search(line)
+        is_isolated_dur = bool(dur_match and len(line) < 35 and not re.match(r'^[\-\•\*\–]', line))
+
         if re.match(r'^[\-\•\*\–]', line):
             if current_proj:
                 current_proj["points"].append(re.sub(r'^[\-\•\*\–]\s*', '', line))
+        elif is_isolated_dur:
+            if current_proj:
+                current_proj["isolated_duration"] = dur_match.group(0)
         elif len(line) > 5 and "github.com" not in line.lower() and "live" not in line.lower():
             if current_proj:
                 projects.append(current_proj)
-            current_proj = {"name": line, "duration": None, "github": None, "points": []}
+            current_proj = {"name": line, "duration": None, "isolated_duration": None, "github": None, "points": []}
             
     if current_proj:
         projects.append(current_proj)
@@ -274,12 +286,17 @@ def extract_projects(text, all_hyperlinks):
                 proj_github = link
                 break
                 
-        combined_text = p["name"] + " " + " ".join(filtered_points)
-        dur_match = DURATION_PATTERN.search(combined_text)
+        duration_val = p.get("isolated_duration")
+        if not duration_val:
+            combined_text = p["name"] + " " + " ".join(filtered_points)
+            dur_match = DURATION_PATTERN.search(combined_text)
+            if dur_match:
+                duration_val = dur_match.group(0).strip()
         
+        # FIX: Changed the strip logic to NOT remove parenthesis! `(MERN)` and `(ML)` are safe.
         formatted_projects.append({
             "name": DURATION_PATTERN.sub('', p["name"]).strip(' |,-'),
-            "duration": dur_match.group(0).strip() if dur_match else None,
+            "duration": duration_val,
             "github": proj_github,
             "points": points_dict
         })
@@ -301,7 +318,7 @@ def extract_achievements(text):
     
     for line in lines:
         cleaned = re.sub(r'^[\-\•\*\–\d\.]+\s*', '', line).strip()
-        if cleaned and "github.com" not in cleaned.lower() and "linkedin.com" not in cleaned.lower():
+        if cleaned and not any(domain in cleaned.lower() for domain in ["github.com", "linkedin.com", "leetcode.com", "codechef.com", "hackerrank.com"]):
             cleaned = fix_squished_text(cleaned)
             points.append(cleaned)
             
@@ -334,6 +351,9 @@ def parse_resume(file_bytes, ext):
         "phone_numbers": extract_phones(text),
         "linkedin": extract_profile_link(text, all_hyperlinks, "linkedin.com", re.compile(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[\w\-_%]+', re.IGNORECASE)),
         "github": extract_profile_link(text, all_hyperlinks, "github.com", re.compile(r'(?:https?://)?(?:www\.)?github\.com/[\w\-]+(?:/[\w\-\.]+)*', re.IGNORECASE)),
+        "leetcode": extract_profile_link(text, all_hyperlinks, "leetcode.com", re.compile(r'(?:https?://)?(?:www\.)?leetcode\.com/[\w\-]+', re.IGNORECASE)),
+        "codechef": extract_profile_link(text, all_hyperlinks, "codechef.com", re.compile(r'(?:https?://)?(?:www\.)?codechef\.com/(?:users/)?[\w\-]+', re.IGNORECASE)),
+        "hackerrank": extract_profile_link(text, all_hyperlinks, "hackerrank.com", re.compile(r'(?:https?://)?(?:www\.)?hackerrank\.com/(?:profile/)?[\w\-]+', re.IGNORECASE)),
         "skills": extract_skills(text),
         "education": extract_education(text),
         "projects": extract_projects(text, all_hyperlinks),
@@ -341,7 +361,7 @@ def parse_resume(file_bytes, ext):
         "responsibilities": extract_responsibilities(text)
     }
 
-st.title("Resume Parser - Production (Gold Master v2)")
+st.title("Resume Parser - Production (Gold Master V3)")
 uploaded = st.file_uploader("Upload Resume (PDF, JPG, PNG)", type=["pdf", "jpg", "jpeg", "png"], key="resume_uploader")
 if uploaded:
     if st.button("Parse Resume"):
